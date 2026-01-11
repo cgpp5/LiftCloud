@@ -29,7 +29,10 @@
       "module": {
         "page": {
           "pages": [
-            "page/gt/home/index.page"
+            "page/gt/home/exercise.page",
+            "page/gt/home/details.page",
+            "page/gt/home/rest.page",
+            "page/gt/home/summary.page"
           ]
         },
         "app-side": {

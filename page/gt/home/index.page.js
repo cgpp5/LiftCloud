@@ -1,199 +1,102 @@
-import { createWidget, widget, prop, showToast } from "@zos/ui";
+import { createWidget, widget, align } from "@zos/ui";
+import { replace } from "@zos/router";
+import { px } from "@zos/utils";
 import { log as Logger } from "@zos/utils";
 import { getDeviceInfo } from "@zos/device";
+import { localStorage } from "@zos/storage";
 
 const logger = Logger.getLogger("LiftCloud");
-
-// Datos de peso y repeticiones
-const WEIGHTS = [];
-for (let i = 0; i <= 200; i += 2.5) {
-  WEIGHTS.push(i);
-}
-
-const REPS = [];
-for (let i = 1; i <= 50; i++) {
-  REPS.push(i);
-}
-
-// Estado global de la página
-let pageState = {
-  weightIndex: 24,  // 60kg por defecto
-  repsIndex: 9,     // 10 reps por defecto
-  isSaving: false,
-  weightText: null,
-  repsText: null
-};
-
-// Funciones de ajuste
-function adjustWeight(delta) {
-  const newIndex = pageState.weightIndex + delta;
-  if (newIndex >= 0 && newIndex < WEIGHTS.length) {
-    pageState.weightIndex = newIndex;
-    pageState.weightText.setProperty(prop.TEXT, `${WEIGHTS[newIndex]} kg`);
-  }
-}
-
-function adjustReps(delta) {
-  const newIndex = pageState.repsIndex + delta;
-  if (newIndex >= 0 && newIndex < REPS.length) {
-    pageState.repsIndex = newIndex;
-    pageState.repsText.setProperty(prop.TEXT, `${REPS[newIndex]}`);
-  }
-}
-
-function saveLog() {
-  if (pageState.isSaving) return;
-
-  const weight = WEIGHTS[pageState.weightIndex];
-  const reps = REPS[pageState.repsIndex];
-  
-  logger.log(`Guardando: ${weight}kg x ${reps}`);
-  pageState.isSaving = true;
-  showToast({ content: `Guardado: ${weight}kg x ${reps}` });
-  
-  // Por ahora solo mostramos el toast, la conexión con app-side se agregará después
-  setTimeout(() => {
-    pageState.isSaving = false;
-  }, 1000);
-}
+const { width: DEVICE_WIDTH, height: DEVICE_HEIGHT } = getDeviceInfo();
 
 Page({
   onInit() {
-    logger.log("LiftCloud Page Iniciada");
+    logger.log("LiftCloud Index Iniciada");
+    
+    // Verificar si hay sets del día para decidir qué mostrar
+    const setsJson = localStorage.getItem('today_sets') || '[]';
+    let sets = [];
+    try {
+      sets = JSON.parse(setsJson);
+    } catch(e) {
+      sets = [];
+    }
+    
+    // Si hay sets, podríamos ir directo al resumen (opcional)
+    // Por ahora, siempre mostramos la pantalla de inicio
   },
 
   build() {
-    const { width, height } = getDeviceInfo();
-    logger.log(`Screen: ${width}x${height}`);
-
-    // 1. Título
+    // Logo / Título
     createWidget(widget.TEXT, {
       x: 0,
-      y: 20,
-      w: width,
-      h: 40,
-      text: "Press Banca",
-      text_size: 28,
-      color: 0xFFFFFF,
-      align_h: 1 // CENTER
+      y: px(80),
+      w: DEVICE_WIDTH,
+      h: px(60),
+      text: "LiftCloud",
+      text_size: px(42),
+      color: 0x00AAFF,
+      align_h: align.CENTER_H
     });
-
-    // 2. Etiqueta PESO
+    
+    // Subtítulo
     createWidget(widget.TEXT, {
-      x: 20,
-      y: 75,
-      w: 80,
-      h: 30,
-      text: "PESO",
-      text_size: 18,
-      color: 0x888888
+      x: 0,
+      y: px(140),
+      w: DEVICE_WIDTH,
+      h: px(40),
+      text: "Fitness Tracker",
+      text_size: px(22),
+      color: 0x666666,
+      align_h: align.CENTER_H
     });
-
-    // 3. Valor del peso (editable con botones)
-    pageState.weightText = createWidget(widget.TEXT, {
-      x: 20,
-      y: 105,
-      w: 140,
-      h: 50,
-      text: `${WEIGHTS[pageState.weightIndex]} kg`,
-      text_size: 32,
-      color: 0x00AAFF
-    });
-
-    // Botones - / + para peso
-    createWidget(widget.BUTTON, {
-      x: 20,
-      y: 160,
-      w: 60,
-      h: 45,
-      text: "-",
-      text_size: 28,
-      normal_color: 0x333333,
-      press_color: 0x555555,
-      radius: 8,
-      click_func: () => adjustWeight(-1)
-    });
-
-    createWidget(widget.BUTTON, {
-      x: 95,
-      y: 160,
-      w: 60,
-      h: 45,
-      text: "+",
-      text_size: 28,
-      normal_color: 0x333333,
-      press_color: 0x555555,
-      radius: 8,
-      click_func: () => adjustWeight(1)
-    });
-
-    // 4. Etiqueta REPS
+    
+    // Icono decorativo (emoji de pesa)
     createWidget(widget.TEXT, {
-      x: width - 100,
-      y: 75,
-      w: 80,
-      h: 30,
-      text: "REPS",
-      text_size: 18,
-      color: 0x888888
+      x: 0,
+      y: px(190),
+      w: DEVICE_WIDTH,
+      h: px(80),
+      text: "🏋️",
+      text_size: px(60),
+      align_h: align.CENTER_H
     });
 
-    // 5. Valor de reps
-    pageState.repsText = createWidget(widget.TEXT, {
-      x: width - 160,
-      y: 105,
-      w: 140,
-      h: 50,
-      text: `${REPS[pageState.repsIndex]}`,
-      text_size: 32,
-      color: 0x00FF88,
-      align_h: 2 // RIGHT
-    });
-
-    // Botones - / + para reps
+    // Botón NUEVO ENTRENAMIENTO
     createWidget(widget.BUTTON, {
-      x: width - 155,
-      y: 160,
-      w: 60,
-      h: 45,
-      text: "-",
-      text_size: 28,
-      normal_color: 0x333333,
-      press_color: 0x555555,
-      radius: 8,
-      click_func: () => adjustReps(-1)
-    });
-
-    createWidget(widget.BUTTON, {
-      x: width - 80,
-      y: 160,
-      w: 60,
-      h: 45,
-      text: "+",
-      text_size: 28,
-      normal_color: 0x333333,
-      press_color: 0x555555,
-      radius: 8,
-      click_func: () => adjustReps(1)
-    });
-
-    // 6. Botón LOG SET (grande, abajo)
-    createWidget(widget.BUTTON, {
-      x: 30,
-      y: height - 90,
-      w: width - 60,
-      h: 60,
-      text: "LOG SET",
-      text_size: 26,
+      x: px(20),
+      y: DEVICE_HEIGHT - px(170),
+      w: DEVICE_WIDTH - px(40),
+      h: px(65),
+      text: "NUEVO EJERCICIO",
+      text_size: px(22),
       color: 0x000000,
       normal_color: 0x00AAFF,
-      press_color: 0x0077CC,
-      radius: 30,
-      click_func: () => saveLog()
+      press_color: 0x005599,
+      radius: px(20),
+      click_func: () => {
+        replace({ url: 'page/gt/home/exercise.page' });
+      }
+    });
+    
+    // Botón VER SESIÓN
+    createWidget(widget.BUTTON, {
+      x: px(20),
+      y: DEVICE_HEIGHT - px(90),
+      w: DEVICE_WIDTH - px(40),
+      h: px(65),
+      text: "VER SESIÓN",
+      text_size: px(22),
+      color: 0xFFFFFF,
+      normal_color: 0x333333,
+      press_color: 0x555555,
+      radius: px(20),
+      click_func: () => {
+        replace({ url: 'page/gt/home/summary.page' });
+      }
     });
   },
 
   onDestroy() {
-    logger.log("LiftCloud Page Destruida");
+    logger.log("LiftCloud Index Destruida");
   }
 });
