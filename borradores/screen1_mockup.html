@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mockup LiftCloud - Picker View</title>
+<style>
+  body {
+    background-color: #222;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    margin: 0;
+    font-family: 'Segoe UI', sans-serif;
+  }
+
+  .watch-case {
+    width: 388px;
+    height: 468px;
+    background: #111;
+    border-radius: 40px;
+    padding: 10px;
+    box-shadow: 0 0 20px rgba(0,0,0,0.5);
+    border: 2px solid #333;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .screen {
+    width: 368px;
+    height: 448px;
+    background-color: #000000;
+    border-radius: 30px;
+    position: relative;
+    overflow: hidden;
+    color: white;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  /* PICKER CONTAINER */
+  .picker-container {
+    position: absolute;
+    top: 20px;
+    width: 100%;
+    height: 330px; /* Altura suficiente para 5 items */
+    overflow-y: scroll;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    scroll-snap-type: y mandatory;
+    /* Efecto de desvanecimiento arriba y abajo */
+    mask-image: linear-gradient(to bottom, transparent, black 20%, black 80%, transparent);
+    -webkit-mask-image: linear-gradient(to bottom, transparent, transparent 5%, black 25%, black 75%, transparent 95%, transparent);
+  }
+  .picker-container::-webkit-scrollbar { display: none; }
+
+  .picker-item {
+    height: 66px; /* 330px / 5 items = 66px exactos */
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    scroll-snap-align: center;
+    transition: all 0.2s ease;
+  }
+
+  /* ESTADO NO SELECCIONADO (Letra Mínima) */
+  .picker-item .text {
+    font-size: 22px; /* Mínimo solicitado */
+    color: #888;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 90%;
+    opacity: 0.6;
+    transition: all 0.2s;
+  }
+
+  /* ESTADO SELECCIONADO (Letra Máxima) */
+  .picker-item.active .text {
+    font-size: 30px; /* Máximo */
+    color: #00AAFF;
+    font-weight: bold;
+    opacity: 1;
+  }
+
+  /* Botón */
+  .select-btn {
+    position: absolute;
+    bottom: 20px;
+    width: 328px;
+    height: 70px;
+    background-color: #00AAFF;
+    border-radius: 16px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 28px;
+    font-weight: bold;
+    color: black;
+    cursor: pointer;
+    box-shadow: 0 4px 10px rgba(0, 170, 255, 0.3);
+    z-index: 10;
+  }
+  
+  .select-btn:active { background-color: #005599; }
+
+  /* Líneas de enfoque del Picker */
+  .picker-lines {
+    position: absolute;
+    top: 152px; /* (20 + 330/2) - 33 */
+    left: 20px;
+    right: 20px;
+    height: 66px;
+    border-top: 1px solid #333;
+    border-bottom: 1px solid #333;
+    pointer-events: none;
+    z-index: 5;
+  }
+</style>
+</head>
+<body>
+
+<div class="watch-case">
+  <div class="screen">
+    <div class="picker-lines"></div>
+
+    <div class="picker-container" id="picker">
+      <div style="height: 132px;"></div> <!-- Padding para centrar el primero (2 items * 66px) -->
+      
+      <!-- Datos de Ejemplo con Textos Largos -->
+      <div class="picker-item"><span class="text">Press Banca</span></div>
+      <div class="picker-item"><span class="text">Sentadilla Bulgara</span></div>
+      <div class="picker-item active"><span class="text">Antebrazos General</span></div>
+      <div class="picker-item"><span class="text">Antebrazos Elevación Pos...</span></div>
+      <div class="picker-item"><span class="text">Curl Concentrado</span></div>
+      <div class="picker-item"><span class="text">Extensiones Tríceps Polea</span></div>
+      <div class="picker-item"><span class="text">Remo Gironda</span></div>
+      
+      <div style="height: 132px;"></div>
+    </div>
+
+    <div class="select-btn" onclick="confirm()">
+      ELIGE EJERCICIO
+    </div>
+  </div>
+</div>
+
+<script>
+  const list = document.getElementById('picker');
+  const items = document.querySelectorAll('.picker-item');
+
+  list.addEventListener('scroll', () => {
+    const center = list.scrollTop + (list.clientHeight / 2);
+    items.forEach(item => {
+      const itemCenter = item.offsetTop + (item.clientHeight / 2);
+      if (Math.abs(center - itemCenter) < 30) {
+        item.classList.add('active');
+      } else {
+        item.classList.remove('active');
+      }
+    });
+  });
+
+  function confirm() {
+    const txt = document.querySelector('.picker-item.active .text').innerText;
+    alert("Seleccionado: " + txt);
+  }
+  list.scrollTop = 132; // Centrar el 3ro
+</script>
+
+</body>
+</html>

@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mockup LiftCloud - Burbujas Originales</title>
+<style>
+  body {
+    background-color: #222;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    margin: 0;
+    font-family: 'Segoe UI', sans-serif;
+  }
+
+  .watch-case {
+    width: 388px;
+    height: 468px;
+    background: #111;
+    border-radius: 40px;
+    padding: 10px;
+    box-shadow: 0 0 20px rgba(0,0,0,0.5);
+    border: 2px solid #333;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .screen {
+    width: 368px;
+    height: 448px;
+    background-color: #000000;
+    border-radius: 30px;
+    position: relative;
+    overflow: hidden;
+    color: white;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  /* 1. Cabecera Fecha */
+  .header {
+    margin-top: 15px;
+    font-size: 22px;
+    color: #888;
+    font-weight: bold;
+    height: 30px;
+    width: 100%;
+    text-align: center;
+  }
+
+  /* 2. Scroll Container Limitado */
+  /* Pantalla (448) - Header (45) - ButtonArea (90) - Gap (15) */
+  .scroll-container {
+    width: 100%;
+    height: 298px; /* Altura calculada para cortar antes del botón */
+    overflow-y: auto;
+    padding-top: 10px;
+    scrollbar-width: none;
+    /* Borde inferior visual para ver donde acaba el área de scroll (opcional) */
+    /* border-bottom: 1px dashed #333; */ 
+  }
+  .scroll-container::-webkit-scrollbar { display: none; }
+
+  /* 3. Burbuja Única (Estilo Original) */
+  .bubble {
+    width: 328px; /* 368 - 40 */
+    height: 60px;
+    border-radius: 18px;
+    margin: 0 auto 12px auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 20px;
+    box-sizing: border-box;
+    color: #000; /* Texto Negro */
+    font-weight: bold;
+    font-size: 20px;
+    cursor: pointer;
+    user-select: none;
+    position: relative;
+    transition: transform 0.1s;
+  }
+  
+  .bubble:active { transform: scale(0.98); opacity: 0.9; }
+
+  /* Texto izquierda */
+  .b-name {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 180px;
+  }
+
+  /* Texto derecha */
+  .b-details {
+    white-space: nowrap;
+  }
+
+  /* 4. Botón Nuevo Ejercicio */
+  .btn-new {
+    position: absolute;
+    bottom: 20px;
+    width: 328px;
+    height: 60px;
+    background-color: #00AAFF;
+    border-radius: 30px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 22px;
+    color: #000;
+    font-weight: bold;
+    box-shadow: 0 -4px 15px rgba(0,0,0,0.3);
+    cursor: pointer;
+    z-index: 10;
+  }
+
+  /* MODAL */
+  .modal-overlay {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    background: rgba(0,0,0,0.85);
+    z-index: 50;
+    display: none;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+  }
+  .modal-box {
+    width: 300px;
+    background: #222;
+    border-radius: 25px;
+    padding: 20px;
+    border: 1px solid #444;
+    text-align: center;
+    position: relative;
+  }
+  .close-x {
+    position: absolute;
+    top: 10px; right: 15px;
+    font-size: 24px; color: #888; cursor: pointer;
+  }
+  .modal-text {
+    font-size: 24px; margin-bottom: 20px; margin-top: 10px; color: #fff;
+  }
+  .btn-delete {
+    width: 100%; height: 50px; background-color: #FF4444; border-radius: 15px;
+    display: flex; justify-content: center; align-items: center;
+    font-size: 20px; color: #fff; font-weight: bold; cursor: pointer;
+  }
+
+</style>
+</head>
+<body>
+
+<div class="watch-case">
+  <div class="screen">
+    <div class="header" id="dateHeader">DD/MM/YYYY</div>
+
+    <div class="scroll-container" id="list">
+      <!-- JS generará las burbujas -->
+    </div>
+
+    <div class="btn-new" onclick="newExercise()">
+      NUEVO EJERCICIO
+    </div>
+
+    <!-- MODAL -->
+    <div class="modal-overlay" id="modal">
+      <div class="modal-box">
+        <div class="close-x" onclick="closeModal()">✕</div>
+        <div class="modal-text">¿Eliminar entrada?</div>
+        <div class="btn-delete" onclick="confirmDelete()">ELIMINAR</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  const now = new Date();
+  document.getElementById('dateHeader').innerText = now.toLocaleDateString('es-ES', { 
+    day: '2-digit', month: '2-digit', year: 'numeric' 
+  });
+
+  const sets = [
+    { name: "Press Banca", w: "60kg", r: "10" },
+    { name: "Press Banca", w: "62.5kg", r: "8" },
+    { name: "Sentadilla", w: "100kg", r: "5" },
+    { name: "Sentadilla", w: "100kg", r: "5" },
+    { name: "Dominadas", w: "0kg", r: "12" },
+    { name: "Curl Bíceps", w: "15kg", r: "12" },
+    { name: "Curl Bíceps", w: "15kg", r: "10" },
+    { name: "Press Militar", w: "40kg", r: "8" }
+  ];
+
+  const listEl = document.getElementById('list');
+  const modalEl = document.getElementById('modal');
+  let pressTimer;
+
+  function stringToColor(str) {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      hash = str.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    const h = Math.abs(hash) % 360; 
+    return `hsl(${h}, 85%, 75%)`; 
+  }
+
+  sets.forEach((set, index) => {
+    const bubble = document.createElement('div');
+    bubble.className = 'bubble';
+    bubble.style.backgroundColor = stringToColor(set.name);
+    
+    bubble.innerHTML = `
+      <span class="b-name">${set.name}</span>
+      <span class="b-details">${set.w} x ${set.r}</span>
+    `;
+
+    // Eventos
+    bubble.onmousedown = function() {
+      pressTimer = setTimeout(() => { openModal(); pressTimer = null; }, 800);
+    };
+    bubble.onmouseup = function() {
+      if (pressTimer) { clearTimeout(pressTimer); editExercise(set.name); }
+    };
+    bubble.ontouchstart = bubble.onmousedown;
+    bubble.ontouchend = function(e) {
+      e.preventDefault(); 
+      if (pressTimer) { clearTimeout(pressTimer); editExercise(set.name); }
+    };
+
+    listEl.appendChild(bubble);
+  });
+
+  function editExercise(name) { alert("Editar: " + name); }
+  function newExercise() { alert("Nuevo Ejercicio"); }
+  function openModal() { modalEl.style.display = 'flex'; }
+  function closeModal() { modalEl.style.display = 'none'; }
+  function confirmDelete() { closeModal(); alert("Eliminado"); }
+</script>
+
+</body>
+</html>

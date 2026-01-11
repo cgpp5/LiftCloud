@@ -92,6 +92,7 @@ Page({
               y: px(0),
               w: DEVICE_WIDTH - px(60),
               h: px(60),
+              key: "name",
               color: 0xFFFFFF,
               text_size: px(24),
               align_v: align.CENTER_V

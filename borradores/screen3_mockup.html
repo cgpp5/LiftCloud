@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mockup LiftCloud - Cronómetro con Límite</title>
+<style>
+  body {
+    background-color: #222;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    margin: 0;
+    font-family: 'Segoe UI', monospace; 
+  }
+
+  .watch-case {
+    width: 388px;
+    height: 468px;
+    background: #111;
+    border-radius: 40px;
+    padding: 10px;
+    box-shadow: 0 0 20px rgba(0,0,0,0.5);
+    border: 2px solid #333;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .screen {
+    width: 368px;
+    height: 448px;
+    background-color: #000000;
+    border-radius: 30px;
+    position: relative;
+    overflow: hidden;
+    color: white;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .label {
+    margin-top: 40px;
+    font-family: sans-serif;
+    font-size: 24px;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+  }
+
+  /* Cronómetro */
+  .timer {
+    margin-top: 30px;
+    font-size: 90px;
+    font-weight: bold;
+    color: #fff;
+    line-height: 1;
+    transition: color 0.3s ease; /* Transición suave de color */
+  }
+  
+  /* CLASE PARA CUANDO TE PASAS DEL TIEMPO */
+  .timer.overtime {
+    color: #FF4444; /* Rojo Alerta */
+  }
+  
+  .btn-container {
+    position: absolute;
+    bottom: 30px;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 15px;
+  }
+
+  .btn {
+    width: 328px;
+    height: 70px;
+    border-radius: 20px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-family: sans-serif;
+    font-size: 24px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: transform 0.1s;
+  }
+  .btn:active { transform: scale(0.98); }
+
+  .btn-next {
+    background-color: #00AAFF;
+    color: black;
+    box-shadow: 0 0 15px rgba(0, 170, 255, 0.2);
+  }
+
+  .btn-finish {
+    background-color: #333;
+    color: #fff;
+    border: 1px solid #444;
+  }
+
+</style>
+</head>
+<body>
+
+<div class="watch-case">
+  <div class="screen">
+    <div class="label">Descanso</div>
+    
+    <div class="timer" id="timerDisplay">00:00</div>
+
+    <div class="btn-container">
+      <div class="btn btn-next" onclick="next()">
+        SIGUIENTE EJERCICIO
+      </div>
+      <div class="btn btn-finish" onclick="finish()">
+        TERMINAR SESIÓN
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  let totalSeconds = 0;
+  const TARGET_SECONDS = 10; // Límite de prueba (en la app real serán 90s)
+  const display = document.getElementById('timerDisplay');
+  
+  const interval = setInterval(() => {
+    totalSeconds++; 
+    
+    const mins = Math.floor(totalSeconds / 60).toString().padStart(2, '0');
+    const secs = (totalSeconds % 60).toString().padStart(2, '0');
+    display.innerText = `${mins}:${secs}`;
+
+    // LÓGICA DE ALERTA
+    if (totalSeconds > TARGET_SECONDS) {
+       // Cambiar a Rojo
+       display.classList.add('overtime');
+       
+       // Vibrar SOLO en el momento exacto que nos pasamos (segundo 11)
+       if (totalSeconds === TARGET_SECONDS + 1) {
+         navigator.vibrate([500, 200, 500]); // Vibración fuerte doble
+         console.log("¡Tiempo excedido!");
+       }
+    } else {
+       display.classList.remove('overtime');
+    }
+
+  }, 1000);
+
+  function next() {
+    clearInterval(interval);
+    alert("Vamos al siguiente set");
+  }
+  
+  function finish() {
+    clearInterval(interval);
+    alert("Sesión guardada");
+  }
+</script>
+
+</body>
+</html>

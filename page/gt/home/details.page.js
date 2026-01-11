@@ -122,7 +122,7 @@ Page({
         {
           type_id: 1,
           item_height: px(50),
-          item_bg_color: 0x111111,
+          item_bg_color: 0x222222,
           item_bg_radius: px(8),
           text_view: [
             {
@@ -130,8 +130,9 @@ Page({
               y: 0,
               w: COL_WIDTH - px(10),
               h: px(50),
-              color: 0xCCCCCC,
-              text_size: px(28),
+              key: "label",
+              color: 0xFFFFFF,
+              text_size: px(26),
               align_h: align.CENTER_H,
               align_v: align.CENTER_V
             }
@@ -166,7 +167,7 @@ Page({
         {
           type_id: 1,
           item_height: px(50),
-          item_bg_color: 0x111111,
+          item_bg_color: 0x222222,
           item_bg_radius: px(8),
           text_view: [
             {
@@ -174,8 +175,9 @@ Page({
               y: 0,
               w: COL_WIDTH - px(10),
               h: px(50),
-              color: 0xCCCCCC,
-              text_size: px(28),
+              key: "label",
+              color: 0xFFFFFF,
+              text_size: px(26),
               align_h: align.CENTER_H,
               align_v: align.CENTER_V
             }
@@ -216,13 +218,13 @@ Page({
       }
     });
 
-    // Botón LOG SET (derecha abajo)
+    // Botón GUARDAR (derecha abajo)
     createWidget(widget.BUTTON, {
       x: px(105),
       y: DEVICE_HEIGHT - px(80),
       w: DEVICE_WIDTH - px(120),
       h: px(60),
-      text: "LOG SET",
+      text: "GUARDAR",
       text_size: px(20),
       color: 0x000000,
       normal_color: 0x00AAFF,
