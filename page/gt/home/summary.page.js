@@ -1,4 +1,4 @@
-import { createWidget, widget, prop, align } from "@zos/ui";
+import { createWidget, widget, prop, align, deleteWidget } from "@zos/ui";
 import { push, replace } from "@zos/router";
 import { px } from "@zos/utils";
 import { log as Logger } from "@zos/utils";
@@ -23,7 +23,6 @@ const COLOR_PALETTE = [
 // Estado de la página
 let pageState = {
   sets: [],
-  scrollContainer: null,
   modalGroup: null,
   itemToDeleteIndex: -1
 };
@@ -44,6 +43,11 @@ Page({
   },
 
   build() {
+    const ROW_HEIGHT = px(60);
+    const GAP = px(10);
+    const BUBBLE_WIDTH = DEVICE_WIDTH - px(40);
+    const HEADER_HEIGHT = px(50);
+    
     // 1. Cabecera con fecha
     const today = getTodayDate();
     createWidget(widget.TEXT, {
@@ -57,22 +61,93 @@ Page({
       align_h: align.CENTER_H
     });
 
-    // 2. Lista scrolleable de sets
-    const LIST_HEIGHT = DEVICE_HEIGHT - px(130);
-    pageState.scrollContainer = createWidget(widget.VIEW_CONTAINER, {
-      x: 0,
-      y: px(45),
-      w: DEVICE_WIDTH,
-      h: LIST_HEIGHT,
-      scroll_enable: true
-    });
-
-    createSetsList();
+    // 2. Lista de sets directamente en la página
+    if (pageState.sets.length === 0) {
+      createWidget(widget.TEXT, {
+        x: 0,
+        y: px(150),
+        w: DEVICE_WIDTH,
+        h: px(40),
+        text: "No hay sets hoy",
+        text_size: px(24),
+        color: 0x666666,
+        align_h: align.CENTER_H
+      });
+    } else {
+      logger.log(`Renderizando ${pageState.sets.length} sets`);
+      
+      pageState.sets.forEach((set, index) => {
+        const yPos = HEADER_HEIGHT + index * (ROW_HEIGHT + GAP);
+        const bubbleColor = getColorFromName(set.name);
+        
+        logger.log(`Set ${index}: ${set.name} - ${set.weight}kg x ${set.reps} at y=${yPos}`);
+        
+        // A. Burbuja de fondo
+        createWidget(widget.FILL_RECT, {
+          x: px(20),
+          y: yPos,
+          w: BUBBLE_WIDTH,
+          h: ROW_HEIGHT,
+          radius: px(16),
+          color: bubbleColor
+        });
+        
+        // B. Nombre del ejercicio (izquierda) - usando text_style para forzar
+        const nameText = set.name ? truncateText(set.name, 10) : "Sin nombre";
+        createWidget(widget.TEXT, {
+          x: px(25),
+          y: yPos + px(18),
+          w: px(145),
+          h: px(24),
+          text: nameText,
+          text_size: px(16),
+          color: 0x000000
+        });
+        
+        // C. Peso x Reps (derecha)
+        const weightStr = set.weight % 1 === 0 ? `${set.weight}` : set.weight.toFixed(1);
+        const detailsText = `${weightStr}kg x ${set.reps}`;
+        createWidget(widget.TEXT, {
+          x: px(170),
+          y: yPos + px(18),
+          w: px(140),
+          h: px(24),
+          text: detailsText,
+          text_size: px(16),
+          color: 0x000000
+        });
+        
+        // D. Botón invisible para interacción (último para no tapar)
+        createWidget(widget.BUTTON, {
+          x: px(20),
+          y: yPos,
+          w: BUBBLE_WIDTH,
+          h: ROW_HEIGHT,
+          radius: px(16),
+          text: "",
+          normal_color: 0x000000,
+          normal_alpha: 0,
+          press_color: 0x000000,
+          press_alpha: 50,
+          click_func: () => {
+            goToEdit(index);
+          },
+          longpress_func: () => {
+            showDeleteModal(index);
+          }
+        });
+      });
+    }
 
     // 3. Botón NUEVO EJERCICIO
+    const btnY = Math.max(
+      HEADER_HEIGHT + pageState.sets.length * (ROW_HEIGHT + GAP) + px(20),
+      DEVICE_HEIGHT - px(80)
+    );
+    
     createWidget(widget.BUTTON, {
       x: px(20),
-      y: DEVICE_HEIGHT - px(80),
+      y: btnY,
       w: DEVICE_WIDTH - px(40),
       h: px(60),
       text: "NUEVO EJERCICIO",
@@ -94,95 +169,6 @@ Page({
     logger.log("Pantalla Resumen Destruida");
   }
 });
-
-function createSetsList() {
-  const ROW_HEIGHT = px(60);
-  const GAP = px(10);
-  const BUBBLE_WIDTH = DEVICE_WIDTH - px(40);
-  
-  if (pageState.sets.length === 0) {
-    // Mostrar mensaje si no hay sets
-    pageState.scrollContainer.createWidget(widget.TEXT, {
-      x: 0,
-      y: px(100),
-      w: DEVICE_WIDTH,
-      h: px(40),
-      text: "No hay sets hoy",
-      text_size: px(24),
-      color: 0x666666,
-      align_h: align.CENTER_H
-    });
-    return;
-  }
-  
-  pageState.sets.forEach((set, index) => {
-    const yPos = index * (ROW_HEIGHT + GAP);
-    const bubbleColor = getColorFromName(set.name);
-    
-    // A. Burbuja de fondo
-    pageState.scrollContainer.createWidget(widget.FILL_RECT, {
-      x: px(20),
-      y: yPos,
-      w: BUBBLE_WIDTH,
-      h: ROW_HEIGHT,
-      radius: px(16),
-      color: bubbleColor
-    });
-    
-    // B. Nombre del ejercicio (izquierda)
-    pageState.scrollContainer.createWidget(widget.TEXT, {
-      x: px(30),
-      y: yPos,
-      w: px(160),
-      h: ROW_HEIGHT,
-      text: truncateText(set.name, 12),
-      text_size: px(20),
-      color: 0x000000,
-      align_v: align.CENTER_V
-    });
-    
-    // C. Peso x Reps (derecha)
-    const weightStr = set.weight % 1 === 0 ? `${set.weight}` : set.weight.toFixed(1);
-    pageState.scrollContainer.createWidget(widget.TEXT, {
-      x: px(190),
-      y: yPos,
-      w: px(140),
-      h: ROW_HEIGHT,
-      text: `${weightStr}kg x ${set.reps}`,
-      text_size: px(20),
-      color: 0x000000,
-      align_h: align.RIGHT,
-      align_v: align.CENTER_V
-    });
-    
-    // D. Botón invisible para interacción
-    pageState.scrollContainer.createWidget(widget.BUTTON, {
-      x: px(20),
-      y: yPos,
-      w: BUBBLE_WIDTH,
-      h: ROW_HEIGHT,
-      radius: px(16),
-      normal_alpha: 0,
-      press_alpha: 50,
-      press_color: 0x000000,
-      click_func: () => {
-        goToEdit(index);
-      },
-      longpress_func: () => {
-        showDeleteModal(index);
-      }
-    });
-  });
-  
-  // Espacio extra al final para scroll
-  pageState.scrollContainer.createWidget(widget.FILL_RECT, {
-    x: 0,
-    y: pageState.sets.length * (ROW_HEIGHT + GAP),
-    w: 10,
-    h: px(50),
-    color: 0x000000
-  });
-}
 
 function getColorFromName(name) {
   let hash = 0;

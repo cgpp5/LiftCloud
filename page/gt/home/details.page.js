@@ -79,6 +79,9 @@ Page({
   build() {
     logger.log(`Building details page, exercise: ${pageState.exerciseName}`);
     
+    const ITEM_HEIGHT = px(45);
+    const CENTER_Y = LIST_HEIGHT / 2;
+    
     // Encabezados KG / REPS
     createWidget(widget.TEXT, {
       x: 0,
@@ -118,33 +121,35 @@ Page({
       w: COL_WIDTH - px(5),
       h: LIST_HEIGHT,
       item_space: px(4),
+      snap_to_center: true,
       item_config: [
         {
           type_id: 1,
-          item_height: px(50),
-          item_bg_color: 0x222222,
-          item_bg_radius: px(8),
+          item_height: ITEM_HEIGHT,
+          item_bg_color: 0x000000,
+          item_bg_radius: 0,
           text_view: [
             {
-              x: 0,
-              y: 0,
-              w: COL_WIDTH - px(10),
-              h: px(50),
+              x: px(5),
+              y: px(8),
+              w: COL_WIDTH - px(20),
+              h: px(30),
               key: "label",
               color: 0xFFFFFF,
-              text_size: px(26),
-              align_h: align.CENTER_H,
-              align_v: align.CENTER_V
+              text_size: px(26)
             }
-          ]
+          ],
+          text_view_count: 1
         }
       ],
       item_config_count: 1,
       data_array: WEIGHT_DATA,
       data_count: WEIGHT_DATA.length,
-      item_click_func: (list, index) => {
-        pageState.weightIndex = index;
-        logger.log(`Peso seleccionado: ${WEIGHT_VALUES[index]}kg`);
+      item_focus_change_func: (list, index, isFocus) => {
+        if (isFocus) {
+          pageState.weightIndex = index;
+          logger.log(`Peso en foco: ${WEIGHT_VALUES[index]}kg`);
+        }
       },
       data_type_config: [
         {
@@ -163,33 +168,35 @@ Page({
       w: COL_WIDTH - px(5),
       h: LIST_HEIGHT,
       item_space: px(4),
+      snap_to_center: true,
       item_config: [
         {
           type_id: 1,
-          item_height: px(50),
-          item_bg_color: 0x222222,
-          item_bg_radius: px(8),
+          item_height: ITEM_HEIGHT,
+          item_bg_color: 0x000000,
+          item_bg_radius: 0,
           text_view: [
             {
-              x: 0,
-              y: 0,
-              w: COL_WIDTH - px(10),
-              h: px(50),
+              x: px(5),
+              y: px(8),
+              w: COL_WIDTH - px(20),
+              h: px(30),
               key: "label",
               color: 0xFFFFFF,
-              text_size: px(26),
-              align_h: align.CENTER_H,
-              align_v: align.CENTER_V
+              text_size: px(26)
             }
-          ]
+          ],
+          text_view_count: 1
         }
       ],
       item_config_count: 1,
       data_array: REPS_DATA,
       data_count: REPS_DATA.length,
-      item_click_func: (list, index) => {
-        pageState.repsIndex = index;
-        logger.log(`Reps seleccionado: ${REPS_VALUES[index]}`);
+      item_focus_change_func: (list, index, isFocus) => {
+        if (isFocus) {
+          pageState.repsIndex = index;
+          logger.log(`Reps en foco: ${REPS_VALUES[index]}`);
+        }
       },
       data_type_config: [
         {
@@ -199,6 +206,41 @@ Page({
         }
       ],
       data_type_config_count: 1
+    });
+    
+    // Indicadores de selección: líneas horizontales en el centro de cada columna
+    const indicatorY = px(35) + CENTER_Y - ITEM_HEIGHT/2;
+    
+    // Líneas para KG (izquierda)
+    createWidget(widget.FILL_RECT, {
+      x: px(5),
+      y: indicatorY - px(2),
+      w: COL_WIDTH - px(15),
+      h: px(2),
+      color: 0x00AAFF
+    });
+    createWidget(widget.FILL_RECT, {
+      x: px(5),
+      y: indicatorY + ITEM_HEIGHT,
+      w: COL_WIDTH - px(15),
+      h: px(2),
+      color: 0x00AAFF
+    });
+    
+    // Líneas para REPS (derecha)
+    createWidget(widget.FILL_RECT, {
+      x: COL_WIDTH + px(8),
+      y: indicatorY - px(2),
+      w: COL_WIDTH - px(15),
+      h: px(2),
+      color: 0x00FF88
+    });
+    createWidget(widget.FILL_RECT, {
+      x: COL_WIDTH + px(8),
+      y: indicatorY + ITEM_HEIGHT,
+      w: COL_WIDTH - px(15),
+      h: px(2),
+      color: 0x00FF88
     });
 
     // Botón VOLVER (izquierda abajo)

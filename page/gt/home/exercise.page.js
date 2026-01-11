@@ -55,17 +55,18 @@ Page({
     }));
     
     // Verificar si venimos en modo edición
-    if (params) {
+    if (params && typeof params === 'string' && params.length > 2) {
       try {
         const data = JSON.parse(params);
-        if (data.mode === 'edit') {
+        if (data && data.mode === 'edit') {
           pageState.editMode = true;
           pageState.editId = data.id;
           const idx = EXERCISES.indexOf(data.name);
           if (idx >= 0) pageState.selectedIndex = idx;
         }
       } catch(e) {
-        logger.error("Error parsing params:", e);
+        // Ignorar errores de parsing - navegación normal sin params
+        logger.log("Navegación sin params de edición");
       }
     }
   },
@@ -73,40 +74,46 @@ Page({
   build() {
     logger.log(`Screen: ${DEVICE_WIDTH}x${DEVICE_HEIGHT}`);
     
+    const LIST_HEIGHT = DEVICE_HEIGHT - px(100);
+    const ITEM_HEIGHT = px(50);
+    const CENTER_Y = LIST_HEIGHT / 2;
+    
     // Usar SCROLL_LIST para la lista de ejercicios
     createWidget(widget.SCROLL_LIST, {
       x: px(10),
       y: px(10),
       w: DEVICE_WIDTH - px(20),
-      h: DEVICE_HEIGHT - px(100),
+      h: LIST_HEIGHT,
       item_space: px(8),
+      snap_to_center: true,
       item_config: [
         {
           type_id: 1,
-          item_height: px(60),
-          item_bg_color: 0x333333,
-          item_bg_radius: px(12),
+          item_height: ITEM_HEIGHT,
+          item_bg_color: 0x000000,
+          item_bg_radius: 0,
           text_view: [
             {
-              x: px(15),
-              y: px(0),
-              w: DEVICE_WIDTH - px(60),
-              h: px(60),
+              x: px(10),
+              y: px(10),
+              w: DEVICE_WIDTH - px(50),
+              h: px(30),
               key: "name",
               color: 0xFFFFFF,
-              text_size: px(24),
-              align_v: align.CENTER_V
+              text_size: px(24)
             }
-          ]
+          ],
+          text_view_count: 1
         }
       ],
       item_config_count: 1,
       data_array: pageState.dataArray,
       data_count: pageState.dataArray.length,
-      item_click_func: (list, index) => {
-        logger.log(`Ejercicio clickeado: ${EXERCISES[index]}`);
-        pageState.selectedIndex = index;
-        selectExercise(EXERCISES[index]);
+      item_focus_change_func: (list, index, isFocus) => {
+        if (isFocus) {
+          pageState.selectedIndex = index;
+          logger.log(`Ejercicio en foco: ${EXERCISES[index]}`);
+        }
       },
       data_type_config: [
         {
@@ -116,6 +123,27 @@ Page({
         }
       ],
       data_type_config_count: 1
+    });
+    
+    // Indicador de selección: líneas horizontales en el centro
+    const indicatorY = px(10) + CENTER_Y - ITEM_HEIGHT/2;
+    
+    // Línea superior
+    createWidget(widget.FILL_RECT, {
+      x: px(10),
+      y: indicatorY - px(2),
+      w: DEVICE_WIDTH - px(20),
+      h: px(2),
+      color: 0x00AAFF
+    });
+    
+    // Línea inferior
+    createWidget(widget.FILL_RECT, {
+      x: px(10),
+      y: indicatorY + ITEM_HEIGHT,
+      w: DEVICE_WIDTH - px(20),
+      h: px(2),
+      color: 0x00AAFF
     });
 
     // Botón SELECCIONAR abajo
