@@ -31,6 +31,9 @@
           "pages": [
             "page/gt/home/index.page"
           ]
+        },
+        "app-side": {
+          "path": "app-side/index"
         }
       },
       "platforms": [
@@ -41,12 +44,12 @@
           "st": "s"
         }
       ],
-      "designWidth": 480
+      "designWidth": 368
     }
   },
   "i18n": {
     "en-US": {
-      "appName": "Hello World"
+      "appName": "LiftCloud"
     },
     "zh-CN": {
       "appName": "你好世界"
