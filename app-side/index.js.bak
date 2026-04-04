@@ -1,0 +1,454 @@
+import { MessageBuilder } from '../shared/message-side'
+
+// ---------------------------------------------------------
+// 0. POLYFILL & DIAGNOSTICS
+// ---------------------------------------------------------
+// El bundled IIFE tiene try/catch vacío que traga TODOS los errores.
+// Logger debe existir como global para que MessageBuilder() no crashee.
+console.log("[app-side] === MODULE LOADING ===");
+console.log("[app-side] Logger=" + (typeof Logger) + " messaging=" + (typeof messaging) + " fetch=" + (typeof fetch));
+
+if (typeof Logger === 'undefined') {
+  console.log("[app-side] Logger NO existe - instalando polyfill");
+  globalThis.Logger = {
+    getLogger: function(name) {
+      return {
+        log: function() { console.log.apply(console, ['[' + name + ']'].concat(Array.prototype.slice.call(arguments))); },
+        warn: function() { console.log.apply(console, ['[' + name + '] WARN'].concat(Array.prototype.slice.call(arguments))); },
+        error: function() { console.log.apply(console, ['[' + name + '] ERR'].concat(Array.prototype.slice.call(arguments))); },
+        debug: function() {},
+        info: function() { console.log.apply(console, ['[' + name + ']'].concat(Array.prototype.slice.call(arguments))); }
+      };
+    }
+  };
+}
+
+// ---------------------------------------------------------
+// 1. CONFIGURACIÓN SUPABASE
+// ---------------------------------------------------------
+const SUPABASE_URL = "https://yfcvszwimcxakjnbqcwy.supabase.co";
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlmY3ZzendpbWN4YWtqbmJxY3d5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjgwNzE0MjYsImV4cCI6MjA4MzY0NzQyNn0.q2utV8wJaSB4rmFbY06sffvbB_CRuZkrI7v2G8m-z3E"; 
+const TABLE_NAME = "workout_logs";
+
+// ---------------------------------------------------------
+// 1.1. HELPERS (REINTENTOS / WARMUP)
+// ---------------------------------------------------------
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function fetchWithRetry(url, options, { retries = 2, retryDelayMs = 800 } = {}) {
+  let lastError;
+
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const response = await fetch(url, options);
+
+      // Si el servidor respondió, no reintentar 4xx (suele ser key/RLS/schema)
+      if (response && response.status >= 400 && response.status < 500) {
+        return response;
+      }
+
+      // 2xx/3xx OK o 5xx: devolvemos para que el caller decida, pero
+      // hacemos retry ante 5xx (arranque en frío / proyecto recién reanudado).
+      if (response && response.status >= 500 && attempt < retries) {
+        await sleep(retryDelayMs * (attempt + 1));
+        continue;
+      }
+
+      return response;
+    } catch (err) {
+      lastError = err;
+      if (attempt < retries) {
+        await sleep(retryDelayMs * (attempt + 1));
+        continue;
+      }
+    }
+  }
+
+  throw lastError;
+}
+
+async function warmupSupabase() {
+  try {
+    const healthUrl = `${SUPABASE_URL}/auth/v1/health`;
+    const healthResp = await fetchWithRetry(
+      healthUrl,
+      {
+        method: 'GET',
+        headers: {
+          apikey: SUPABASE_KEY,
+          Authorization: `Bearer ${SUPABASE_KEY}`
+        }
+      },
+      { retries: 1, retryDelayMs: 500 }
+    );
+
+    console.log(`🩺 Supabase auth health: ${healthResp?.status}`);
+
+    const restUrl = `${SUPABASE_URL}/rest/v1/${TABLE_NAME}?select=id&limit=1`;
+    const restResp = await fetchWithRetry(
+      restUrl,
+      {
+        method: 'GET',
+        headers: {
+          apikey: SUPABASE_KEY,
+          Authorization: `Bearer ${SUPABASE_KEY}`
+        }
+      },
+      { retries: 1, retryDelayMs: 800 }
+    );
+
+    console.log(`🩺 Supabase rest warmup: ${restResp?.status}`);
+  } catch (e) {
+    console.log(`🩺 Warmup falló (no bloqueante): ${e}`);
+  }
+}
+
+// ---------------------------------------------------------
+// 2. FUNCIONES DE NEGOCIO
+// ---------------------------------------------------------
+
+/**
+ * Calcula puntuación usando fórmula Epley (1RM estimado)
+ */
+function calculateScore(weight, reps) {
+  if (reps === 0) return 0;
+  return Number((weight * (1 + reps / 30)).toFixed(2));
+}
+
+/**
+ * Envía datos a Supabase
+ */
+async function sendToSupabase(data) {
+  const url = `${SUPABASE_URL}/rest/v1/${TABLE_NAME}`;
+  
+  console.log(`🌐 Enviando a Supabase: ${JSON.stringify(data)}`);
+  
+  try {
+    const response = await fetchWithRetry(url, {
+      method: "POST",
+      headers: {
+        "apikey": SUPABASE_KEY,
+        "Authorization": `Bearer ${SUPABASE_KEY}`,
+        "Content-Type": "application/json",
+        "Prefer": "return=minimal"
+      },
+      body: JSON.stringify(data),
+    }, { retries: 3, retryDelayMs: 900 });
+
+    console.log(`📡 Response status: ${response.status}`);
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.log(`❌ Error HTTP: ${response.status} - ${errorText}`);
+      return false;
+    }
+
+    console.log(`✅ Insertado en Supabase correctamente`);
+    return true;
+
+  } catch (error) {
+    console.log(`❌ Error de red: ${error}`);
+    throw error;
+  }
+}
+
+// ---------------------------------------------------------
+// 3. SERVICIO PRINCIPAL
+// ---------------------------------------------------------
+let messageBuilder = null;
+try {
+  messageBuilder = new MessageBuilder();
+  console.log("[app-side] MessageBuilder creado OK");
+} catch(e) {
+  console.log("[app-side] ERROR creando MessageBuilder: " + String(e));
+}
+
+AppSideService({
+  onInit() {
+    try {
+    console.log("========================================");
+    console.log("LiftCloud Side Service INICIADO");
+    console.log("========================================");
+    console.log("[app-side] messageBuilder=" + (!!messageBuilder) + " messaging=" + (typeof messaging !== 'undefined'));
+
+    if (!messageBuilder) {
+      console.log("[app-side] FATAL: messageBuilder es null, abortando");
+      return;
+    }
+
+    // Warmup no-bloqueante
+    warmupSupabase();
+    
+    // Establecer conexión BLE
+    console.log("[app-side] Llamando listen()... messaging=" + (typeof messaging));
+    messageBuilder.listen(() => {
+      console.log("[app-side] listen() CALLBACK ejecutado - conexión BLE establecida");
+    })
+    
+    // IMPORTANTE: Si messaging no existe, listen() retorna silenciosamente
+    // sin llamar al callback. Detectamos esto:
+    if (typeof messaging === 'undefined') {
+      console.log("[app-side] ADVERTENCIA: messaging no disponible - listen() fue no-op");
+    }
+    
+    console.log("[app-side] listen() OK, registrando handler...");
+    
+    // Handler de requests del reloj
+    messageBuilder.on('request', async (ctx) => {
+      try {
+      const payload = messageBuilder.buf2Json(ctx.request.payload)
+      console.log("----------------------------------------");
+      console.log("REQUEST recibido:", JSON.stringify(payload));
+      console.log("----------------------------------------");
+      
+      const { method, params } = payload
+      
+      if (method === 'SYNC_PENDING') {
+        await handleSyncPending(ctx, params)
+      } else if (method === 'LOG_EXERCISE') {
+        await handleLogExercise(ctx, params)
+      } else if (method === 'SYNC_EXERCISES') {
+        await handleSyncExercises(ctx, params)
+      } else if (method === 'DELETE_EXERCISE') {
+        await handleDeleteExercise(ctx, params)
+      } else if (method === 'GET_EXERCISES') {
+        await handleGetExercises(ctx, params)
+      } else {
+        console.log(`⚠️ Método desconocido: ${method}`);
+        ctx.response({ data: { status: "error", msg: "Método desconocido" } })
+      }
+      } catch (handlerError) {
+        console.log("[app-side] ERROR en handler: " + String(handlerError));
+        try { ctx.response({ data: { status: "error", msg: String(handlerError) } }); } catch(e2) {}
+      }
+    })
+    } catch (initError) {
+      console.log("[app-side] ERROR CRITICO en onInit: " + String(initError));
+    }
+  },
+  
+  onRun() {},
+  
+  onDestroy() {
+    console.log("LiftCloud Side Service DESTRUIDO");
+  }
+})
+
+// ---------------------------------------------------------
+// 4. HANDLERS
+// ---------------------------------------------------------
+
+async function handleSyncPending(ctx, params) {
+  const { sets } = params || {};
+  
+  console.log(">>> handleSyncPending llamado");
+  
+  if (!sets || !Array.isArray(sets) || sets.length === 0) {
+    console.log("❌ No hay sets para sincronizar");
+    return ctx.response({ data: { status: "error", msg: "No hay sets" } });
+  }
+  
+  console.log(`📤 Sincronizando ${sets.length} sets...`);
+  
+  let successCount = 0;
+  let failedIds = [];
+  
+  for (const set of sets) {
+    console.log(`→ ${set.exercise}: ${set.weight}kg x ${set.reps}`);
+    try {
+      const score = calculateScore(set.weight, set.reps);
+      const payload = {
+        exercise_name: set.exercise,
+        weight: set.weight,
+        reps: set.reps,
+        score: score
+      };
+      
+      const success = await sendToSupabase(payload);
+      if (success) {
+        console.log(`  ✅ OK`);
+        successCount++;
+      } else {
+        console.log(`  ❌ Fallo`);
+        failedIds.push(set.localId);
+      }
+    } catch(e) {
+      console.log(`  ❌ Error: ${e}`);
+      failedIds.push(set.localId);
+    }
+  }
+  
+  console.log(`>>> Completado: ${successCount}/${sets.length} exitosos`);
+  ctx.response({ 
+    data: { 
+      status: "success", 
+      synced: successCount, 
+      failed: failedIds 
+    } 
+  });
+}
+
+async function handleLogExercise(ctx, params) {
+  const { exercise, weight, reps } = params || {};
+
+  if (!exercise || weight === undefined || reps === undefined) {
+    return ctx.response({ data: { status: "error", msg: "Datos incompletos" } });
+  }
+
+  const score = calculateScore(weight, reps);
+  console.log(`Calculado Score: ${score} para ${exercise}`);
+
+  const payload = {
+    exercise_name: exercise,
+    weight: weight,
+    reps: reps,
+    score: score
+  };
+
+  try {
+    const success = await sendToSupabase(payload);
+    
+    if (success) {
+      ctx.response({ data: { status: "success", score: score } });
+    } else {
+      ctx.response({ data: { status: "error", msg: "Error en Supabase" } });
+    }
+  } catch (error) {
+    console.log("Error de red:", error);
+    ctx.response({ data: { status: "offline", msg: "Sin conexión" } });
+  }
+}
+
+// ---------------------------------------------------------
+// 5. HANDLERS DE EJERCICIOS
+// ---------------------------------------------------------
+
+async function handleSyncExercises(ctx, params) {
+  const { exercises } = params || {};
+  
+  console.log(">>> handleSyncExercises llamado");
+  
+  if (!exercises || !Array.isArray(exercises)) {
+    return ctx.response({ data: { status: "error", msg: "Lista inválida" } });
+  }
+  
+  console.log(`📤 Sincronizando ${exercises.length} ejercicios...`);
+  
+  try {
+    // Primero eliminar todos los ejercicios existentes
+    const deleteUrl = `${SUPABASE_URL}/rest/v1/exercises?name=neq.null`;
+    await fetchWithRetry(deleteUrl, {
+      method: "DELETE",
+      headers: {
+        "apikey": SUPABASE_KEY,
+        "Authorization": `Bearer ${SUPABASE_KEY}`
+      }
+    }, { retries: 2, retryDelayMs: 900 });
+    
+    // Insertar todos los ejercicios
+    const insertUrl = `${SUPABASE_URL}/rest/v1/exercises`;
+    const data = exercises.map((item) => {
+      if (typeof item === "string") {
+        return { name: item };
+      }
+
+      const name = (item && item.name) ? String(item.name) : "";
+      const defaultWeight = item && item.defaultWeight !== undefined ? Number(item.defaultWeight) : null;
+      const defaultReps = item && item.defaultReps !== undefined ? Number(item.defaultReps) : null;
+
+      return {
+        name,
+        default_weight: Number.isFinite(defaultWeight) ? defaultWeight : null,
+        default_reps: Number.isFinite(defaultReps) ? defaultReps : null
+      };
+    });
+    
+    const response = await fetchWithRetry(insertUrl, {
+      method: "POST",
+      headers: {
+        "apikey": SUPABASE_KEY,
+        "Authorization": `Bearer ${SUPABASE_KEY}`,
+        "Content-Type": "application/json",
+        "Prefer": "return=minimal"
+      },
+      body: JSON.stringify(data)
+    }, { retries: 3, retryDelayMs: 900 });
+    
+    if (response.ok) {
+      console.log(`✅ ${exercises.length} ejercicios sincronizados`);
+      ctx.response({ data: { status: "success", synced: exercises.length } });
+    } else {
+      const errorText = await response.text();
+      console.log(`❌ Error: ${errorText}`);
+      ctx.response({ data: { status: "error", msg: errorText } });
+    }
+  } catch(e) {
+    console.log(`❌ Error sync ejercicios: ${e}`);
+    ctx.response({ data: { status: "error", msg: String(e) } });
+  }
+}
+
+async function handleDeleteExercise(ctx, params) {
+  const { name } = params || {};
+  
+  console.log(`>>> handleDeleteExercise: ${name}`);
+  
+  if (!name) {
+    return ctx.response({ data: { status: "error", msg: "Nombre requerido" } });
+  }
+  
+  try {
+    const url = `${SUPABASE_URL}/rest/v1/exercises?name=eq.${encodeURIComponent(name)}`;
+    const response = await fetchWithRetry(url, {
+      method: "DELETE",
+      headers: {
+        "apikey": SUPABASE_KEY,
+        "Authorization": `Bearer ${SUPABASE_KEY}`
+      }
+    }, { retries: 2, retryDelayMs: 900 });
+    
+    if (response.ok) {
+      console.log(`✅ Ejercicio eliminado: ${name}`);
+      ctx.response({ data: { status: "success" } });
+    } else {
+      ctx.response({ data: { status: "error", msg: "Error eliminando" } });
+    }
+  } catch(e) {
+    console.log(`❌ Error: ${e}`);
+    ctx.response({ data: { status: "error", msg: String(e) } });
+  }
+}
+
+async function handleGetExercises(ctx, params) {
+  console.log(">>> handleGetExercises");
+  
+  try {
+    const url = `${SUPABASE_URL}/rest/v1/exercises?select=name,default_weight,default_reps&order=name`;
+    const response = await fetchWithRetry(url, {
+      method: "GET",
+      headers: {
+        "apikey": SUPABASE_KEY,
+        "Authorization": `Bearer ${SUPABASE_KEY}`
+      }
+    }, { retries: 2, retryDelayMs: 900 });
+    
+    if (response.ok) {
+      const data = await response.json();
+      const exercises = data.map((e) => ({
+        name: e.name,
+        defaultWeight: e.default_weight,
+        defaultReps: e.default_reps
+      }));
+      console.log(`✅ ${exercises.length} ejercicios obtenidos`);
+      ctx.response({ data: { status: "success", exercises } });
+    } else {
+      ctx.response({ data: { status: "error", msg: "Error obteniendo" } });
+    }
+  } catch(e) {
+    console.log(`❌ Error: ${e}`);
+    ctx.response({ data: { status: "error", msg: String(e) } });
+  }
+}

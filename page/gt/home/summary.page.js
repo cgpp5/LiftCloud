@@ -1,35 +1,29 @@
-import { createWidget, widget, prop, align, deleteWidget } from "@zos/ui";
+import { createWidget, widget, prop, align, deleteWidget, setStatusBarVisible } from "@zos/ui";
 import { push, replace } from "@zos/router";
 import { px } from "@zos/utils";
 import { log as Logger } from "@zos/utils";
 import { getDeviceInfo } from "@zos/device";
 import { localStorage } from "@zos/storage";
+import { BasePage } from "@zeppos/zml/base-page";
 
 const logger = Logger.getLogger("LiftCloud-Summary");
 const { width: DEVICE_WIDTH, height: DEVICE_HEIGHT } = getDeviceInfo();
 
-// Paleta de colores pastel para las burbujas
-const COLOR_PALETTE = [
-  0xFFB3BA, // Rosa
-  0xFFDFBA, // Melocotón
-  0xFFFFBA, // Amarillo
-  0xBAFFC9, // Verde claro
-  0xBAE1FF, // Azul claro
-  0xE6E6FA, // Lavanda
-  0xFFC0CB, // Pink
-  0x98FB98  // Verde menta
-];
+let pageContext = null;
 
 // Estado de la página
 let pageState = {
   sets: [],
   modalGroup: null,
-  itemToDeleteIndex: -1
+  itemToDeleteIndex: -1,
+  scrollContainer: null
 };
 
-Page({
+Page(BasePage({
   onInit() {
+    pageContext = this;
     logger.log("Pantalla Resumen Iniciada");
+    setStatusBarVisible(false);
     
     // Cargar sets del día
     const setsJson = localStorage.getItem('today_sets') || '[]';
@@ -40,9 +34,22 @@ Page({
     }
     
     logger.log(`Cargados ${pageState.sets.length} sets`);
+
+    // Sincronización automática al entrar
+    autoSyncPendingSets();
   },
 
   build() {
+    pageState.scrollContainer = createWidget(widget.VIEW_CONTAINER, {
+      x: 0,
+      y: 0,
+      w: DEVICE_WIDTH,
+      h: DEVICE_HEIGHT - px(90),
+      scroll_enable: true,
+      scroll_direction: 1
+    });
+    const parent = pageState.scrollContainer;
+
     const ROW_HEIGHT = px(60);
     const GAP = px(10);
     const BUBBLE_WIDTH = DEVICE_WIDTH - px(40);
@@ -50,27 +57,27 @@ Page({
     
     // 1. Cabecera con fecha
     const today = getTodayDate();
-    createWidget(widget.TEXT, {
+    parent.createWidget(widget.TEXT, {
       x: 0,
       y: px(10),
       w: DEVICE_WIDTH,
       h: px(30),
       text: today,
-      text_size: px(22),
-      color: 0xAAAAAA,
+      text_size: px(23),
+      color: 0x00FF00,
       align_h: align.CENTER_H
     });
 
     // 2. Lista de sets directamente en la página
     if (pageState.sets.length === 0) {
-      createWidget(widget.TEXT, {
+      parent.createWidget(widget.TEXT, {
         x: 0,
         y: px(150),
         w: DEVICE_WIDTH,
         h: px(40),
         text: "No hay sets hoy",
-        text_size: px(24),
-        color: 0x666666,
+        text_size: px(25),
+        color: 0x00FF00,
         align_h: align.CENTER_H
       });
     } else {
@@ -78,106 +85,66 @@ Page({
       
       pageState.sets.forEach((set, index) => {
         const yPos = HEADER_HEIGHT + index * (ROW_HEIGHT + GAP);
-        const bubbleColor = getColorFromName(set.name);
-        
         logger.log(`Set ${index}: ${set.name} - ${set.weight}kg x ${set.reps} at y=${yPos}`);
         
-        // A. Burbuja de fondo
-        createWidget(widget.FILL_RECT, {
-          x: px(20),
-          y: yPos,
-          w: BUBBLE_WIDTH,
-          h: ROW_HEIGHT,
-          radius: px(16),
-          color: bubbleColor
-        });
-        
-        // B. Nombre del ejercicio (izquierda) - usando text_style para forzar
-        const nameText = set.name ? truncateText(set.name, 10) : "Sin nombre";
-        createWidget(widget.TEXT, {
-          x: px(25),
-          y: yPos + px(18),
-          w: px(145),
-          h: px(24),
-          text: nameText,
-          text_size: px(16),
-          color: 0x000000
-        });
-        
-        // C. Peso x Reps (derecha)
+        // IMPLEMENTACIÓN SIMPLIFICADA
+        // Usamos un único botón que contiene el texto y el color de fondo para asegurar funcionalidad
+        const nameText = set.name ? truncateText(set.name, 16) : "Ej";
         const weightStr = set.weight % 1 === 0 ? `${set.weight}` : set.weight.toFixed(1);
-        const detailsText = `${weightStr}kg x ${set.reps}`;
-        createWidget(widget.TEXT, {
-          x: px(170),
-          y: yPos + px(18),
-          w: px(140),
-          h: px(24),
-          text: detailsText,
-          text_size: px(16),
-          color: 0x000000
-        });
-        
-        // D. Botón invisible para interacción (último para no tapar)
-        createWidget(widget.BUTTON, {
+        const displayText = `${nameText} ${weightStr}kg x ${set.reps}`;
+
+        parent.createWidget(widget.BUTTON, {
           x: px(20),
           y: yPos,
           w: BUBBLE_WIDTH,
           h: ROW_HEIGHT,
-          radius: px(16),
-          text: "",
-          normal_color: 0x000000,
+          text: displayText,
+          text_size: px(25),
+          color: 0x00FF00,
           normal_alpha: 0,
-          press_color: 0x000000,
-          press_alpha: 50,
+          press_alpha: 0,
           click_func: () => {
+            logger.log(`Click en set ${index}`);
             goToEdit(index);
           },
           longpress_func: () => {
+            logger.log(`Longpress en set ${index}`);
             showDeleteModal(index);
           }
         });
       });
     }
 
-    // 3. Botón NUEVO EJERCICIO
-    const btnY = Math.max(
-      HEADER_HEIGHT + pageState.sets.length * (ROW_HEIGHT + GAP) + px(20),
-      DEVICE_HEIGHT - px(80)
-    );
-    
+    // 3. Botón NUEVO EJERCICIO (fijo)
     createWidget(widget.BUTTON, {
-      x: px(20),
-      y: btnY,
-      w: DEVICE_WIDTH - px(40),
-      h: px(60),
+      x: px(30),
+      y: DEVICE_HEIGHT - px(88),
+      w: DEVICE_WIDTH - px(60),
+      h: px(80),
       text: "NUEVO EJERCICIO",
-      text_size: px(22),
+      text_size: px(26),
       color: 0x000000,
-      normal_color: 0x00AAFF,
-      press_color: 0x005599,
+      normal_color: 0x00FF00,
+      press_color: 0x00AA00,
       radius: px(30),
       click_func: () => {
         push({ url: 'page/gt/home/exercise.page' });
       }
     });
 
-    // 4. Crear modal (oculto inicialmente)
+    // 5. Crear modal (oculto inicialmente)
     createDeleteModal();
   },
 
   onDestroy() {
+    pageContext = null;
     logger.log("Pantalla Resumen Destruida");
   }
-});
+}));
 
-function getColorFromName(name) {
-  let hash = 0;
-  for (let i = 0; i < name.length; i++) {
-    hash = name.charCodeAt(i) + ((hash << 5) - hash);
-  }
-  const index = Math.abs(hash) % COLOR_PALETTE.length;
-  return COLOR_PALETTE[index];
-}
+// =====================
+// Funciones auxiliares
+// =====================
 
 function truncateText(text, limit) {
   if (!text) return "";
@@ -240,7 +207,7 @@ function createDeleteModal() {
     w: DEVICE_WIDTH,
     h: px(50),
     text: "¿Eliminar entrada?",
-    text_size: px(24),
+    text_size: px(26),
     color: 0xFFFFFF,
     align_h: align.CENTER_H
   });
@@ -248,11 +215,11 @@ function createDeleteModal() {
   // Botón X para cerrar
   pageState.modalGroup.createWidget(widget.BUTTON, {
     x: DEVICE_WIDTH - px(60),
-    y: px(40),
+    y: px(60),
     w: px(50),
     h: px(50),
     text: "X",
-    text_size: px(28),
+    text_size: px(32),
     color: 0x888888,
     normal_alpha: 0,
     press_alpha: 50,
@@ -268,7 +235,7 @@ function createDeleteModal() {
     w: DEVICE_WIDTH - px(80),
     h: px(60),
     text: "ELIMINAR",
-    text_size: px(22),
+    text_size: px(24),
     color: 0xFFFFFF,
     normal_color: 0xFF4444,
     press_color: 0xCC0000,
@@ -284,12 +251,30 @@ function createDeleteModal() {
 
 function showDeleteModal(index) {
   pageState.itemToDeleteIndex = index;
+  if (pageState.scrollContainer) {
+    pageState.scrollContainer.setProperty(prop.VISIBLE, false);
+  }
   pageState.modalGroup.setProperty(prop.VISIBLE, true);
 }
 
 function hideModal() {
   pageState.modalGroup.setProperty(prop.VISIBLE, false);
   pageState.itemToDeleteIndex = -1;
+  if (pageState.scrollContainer) {
+    pageState.scrollContainer.setProperty(prop.VISIBLE, true);
+  }
+}
+
+function autoSyncPendingSets() {
+  const pendingJson = localStorage.getItem('pending_sync') || '[]';
+  try {
+    const pending = JSON.parse(pendingJson);
+    if (Array.isArray(pending) && pending.length > 0) {
+      syncPendingSets();
+    }
+  } catch (e) {
+    logger.log("Error parseando pending_sync");
+  }
 }
 
 function deleteItem() {
@@ -307,4 +292,117 @@ function deleteItem() {
   }
   
   hideModal();
+}
+
+/**
+ * Muestra un mensaje temporal tipo toast
+ */
+function showToast(message) {
+  logger.log(`Toast: ${message}`);
+  // En ZeppOS no hay toast nativo, usamos un text temporal
+  const toast = createWidget(widget.TEXT, {
+    x: px(20),
+    y: DEVICE_HEIGHT - px(120),
+    w: DEVICE_WIDTH - px(40),
+    h: px(40),
+    text: message,
+    text_size: px(16),
+    color: 0x00FF00,
+    align_h: align.CENTER_H
+  });
+  
+  // Auto-ocultar después de 2 segundos
+  setTimeout(() => {
+    deleteWidget(toast);
+  }, 2000);
+}
+
+/**
+ * Sincroniza los sets pendientes con Supabase via BasePage
+ */
+function syncPendingSets() {
+  logger.log("=== INICIANDO SINCRONIZACIÓN ===");
+  
+  if (!pageContext) {
+    logger.log("pageContext no disponible");
+    showToast("Error: Sin conexión");
+    return;
+  }
+  
+  // Leer cola de pendientes
+  const pendingJson = localStorage.getItem('pending_sync') || '[]';
+  let pending = [];
+  try {
+    pending = JSON.parse(pendingJson);
+  } catch(e) {
+    logger.log("Error parseando pending_sync");
+    return;
+  }
+  
+  if (pending.length === 0) {
+    logger.log("No hay sets pendientes de sincronizar");
+    showToast("No hay pendientes");
+    return;
+  }
+  
+  logger.log(`${pending.length} sets en cola de sincronización`);
+  
+  pageContext.request({
+    method: 'SYNC_PENDING',
+    params: { sets: pending }
+  })
+  .then((data) => {
+    logger.log(`Respuesta sync: ${JSON.stringify(data)}`);
+    
+    if (data && data.status === "success") {
+      logger.log(`✓ Sincronizados ${data.synced || 0} sets`);
+      
+      // Limpiar cola de pendientes exitosos
+      if (data.failed && data.failed.length > 0) {
+        // Mantener solo los que fallaron
+        const remaining = pending.filter(s => data.failed.includes(s.localId));
+        localStorage.setItem('pending_sync', JSON.stringify(remaining));
+        showToast(`${data.synced} OK, ${data.failed.length} fallidos`);
+      } else {
+        // Todos sincronizados
+        localStorage.setItem('pending_sync', '[]');
+        showToast(`✓ ${data.synced} sincronizados`);
+      }
+      
+      // Marcar como sincronizados en today_sets
+      markSetsAsSynced(pending.map(s => s.localId));
+      
+      // Recargar página después de 1.5s para actualizar contador
+      setTimeout(() => {
+        replace({ url: 'page/gt/home/summary.page' });
+      }, 1500);
+      
+    } else {
+      logger.log(`Error: ${(data && data.msg) || 'desconocido'}`);
+      showToast("Error en sincronización");
+    }
+  })
+  .catch((error) => {
+    logger.log(`✗ Error de comunicación: ${error}`);
+    showToast("Error de conexión");
+  });
+}
+
+/**
+ * Marca múltiples sets como sincronizados
+ */
+function markSetsAsSynced(ids) {
+  const setsJson = localStorage.getItem('today_sets') || '[]';
+  try {
+    const sets = JSON.parse(setsJson);
+    ids.forEach(id => {
+      const idx = sets.findIndex(s => s.id === id);
+      if (idx >= 0) {
+        sets[idx].synced = true;
+      }
+    });
+    localStorage.setItem('today_sets', JSON.stringify(sets));
+  } catch(e) {
+    logger.log('Error marcando como sincronizados');
+  }
 }

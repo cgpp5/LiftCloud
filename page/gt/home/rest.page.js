@@ -1,10 +1,12 @@
-import { createWidget, widget, prop, align } from "@zos/ui";
+import { createWidget, widget, prop, align, setStatusBarVisible } from "@zos/ui";
 import { push, exit } from "@zos/router";
 import { px } from "@zos/utils";
 import { log as Logger } from "@zos/utils";
 import { getDeviceInfo } from "@zos/device";
 import { localStorage } from "@zos/storage";
 import { Vibrator, VIBRATOR_SCENE_STRONG_REMINDER } from "@zos/sensor";
+import { setKeepScreenOn } from "@zos/display";
+import { BasePage } from "@zeppos/zml/base-page";
 
 const logger = Logger.getLogger("LiftCloud-Rest");
 const { width: DEVICE_WIDTH, height: DEVICE_HEIGHT } = getDeviceInfo();
@@ -22,9 +24,11 @@ let pageState = {
   vibrator: null
 };
 
-Page({
+Page(BasePage({
   onInit() {
     logger.log("Pantalla Descanso Iniciada");
+    setStatusBarVisible(false);
+    setKeepScreenOn(true);
     pageState.startTime = Date.now();
     pageState.hasAlerted = false;
     
@@ -50,8 +54,8 @@ Page({
       w: DEVICE_WIDTH,
       h: px(35),
       text: "DESCANSO",
-      text_size: px(20),
-      color: 0x888888,
+      text_size: px(26),
+      color: 0x00FF00,
       align_h: align.CENTER_H
     });
 
@@ -63,22 +67,22 @@ Page({
       h: px(100),
       text: "00:00",
       text_size: px(80),
-      color: 0xFFFFFF,
+      color: 0x00FF00,
       align_h: align.CENTER_H
     });
 
     // Botón SIGUIENTE EJERCICIO
     createWidget(widget.BUTTON, {
-      x: px(20),
-      y: DEVICE_HEIGHT - px(180),
-      w: DEVICE_WIDTH - px(40),
-      h: px(70),
+      x: px(30),
+      y: DEVICE_HEIGHT - px(195),
+      w: DEVICE_WIDTH - px(60),
+      h: px(80),
       text: "SIGUIENTE EJERCICIO",
-      text_size: px(22),
-      color: 0x000000,
-      normal_color: 0x00AAFF,
-      press_color: 0x005599,
-      radius: px(20),
+      text_size: px(26),
+      color: 0x00FF00,
+      normal_color: 0x1A1A1A,
+      press_color: 0x151515,
+      radius: px(30),
       click_func: () => {
         goToNextExercise();
       }
@@ -86,16 +90,16 @@ Page({
 
     // Botón TERMINAR SESIÓN
     createWidget(widget.BUTTON, {
-      x: px(20),
+      x: px(30),
       y: DEVICE_HEIGHT - px(95),
-      w: DEVICE_WIDTH - px(40),
-      h: px(70),
+      w: DEVICE_WIDTH - px(60),
+      h: px(80),
       text: "TERMINAR SESIÓN",
-      text_size: px(22),
-      color: 0xFFFFFF,
-      normal_color: 0x333333,
-      press_color: 0x555555,
-      radius: px(20),
+      text_size: px(26),
+      color: 0x00FF00,
+      normal_color: 0x1A1A1A,
+      press_color: 0x151515,
+      radius: px(30),
       click_func: () => {
         finishSession();
       }
@@ -107,6 +111,7 @@ Page({
 
   onDestroy() {
     logger.log("Pantalla Descanso Destruida");
+    setKeepScreenOn(false);
     clearTimer();
     if (pageState.vibrator) {
       try {
@@ -114,7 +119,7 @@ Page({
       } catch(e) {}
     }
   }
-});
+}));
 
 function startTimer() {
   pageState.timerInterval = setInterval(() => {
@@ -133,7 +138,7 @@ function tick() {
     // Verificar si pasamos el límite
     if (elapsedSeconds > pageState.targetSeconds) {
       // Cambiar a rojo
-      pageState.timerWidget.setProperty(prop.COLOR, 0xFF4444);
+      pageState.timerWidget.setProperty(prop.COLOR, 0xFF0000);
       
       // Vibrar solo la primera vez
       if (!pageState.hasAlerted) {
@@ -199,16 +204,76 @@ function finishSession() {
 
 function saveRestTime() {
   const elapsedSeconds = Math.floor((Date.now() - pageState.startTime) / 1000);
+  logger.log(`saveRestTime llamado - descanso: ${elapsedSeconds}s`);
   
   // Actualizar el último set con el tiempo de descanso
   const setsJson = localStorage.getItem('today_sets') || '[]';
+  logger.log(`today_sets raw: ${setsJson.substring(0, 100)}...`);
+  
   try {
     const sets = JSON.parse(setsJson);
+    logger.log(`Sets parseados: ${sets.length}`);
+    
     if (sets.length > 0) {
-      sets[sets.length - 1].rest = elapsedSeconds;
+      const lastSet = sets[sets.length - 1];
+      lastSet.rest = elapsedSeconds;
       localStorage.setItem('today_sets', JSON.stringify(sets));
+      logger.log(`Último set actualizado: ${lastSet.name}`);
+      
+      // Sincronizar el set completo con Supabase
+      syncSetToCloud(lastSet);
+    } else {
+      logger.log("No hay sets para actualizar");
     }
   } catch(e) {
     logger.error("Error guardando tiempo de descanso:", e);
+  }
+}
+
+/**
+ * Sincroniza un set completo con Supabase a través del app-side
+ * Usa el sistema de mensajería de ZeppOS
+ */
+function syncSetToCloud(set) {
+  logger.log(`>>> syncSetToCloud llamado para: ${set.name}`);
+  logger.log(`    Datos: ${set.weight}kg x ${set.reps} (rest: ${set.rest}s)`);
+  
+  try {
+    // Preparar payload para sincronización
+    const messagePayload = {
+      exercise: set.name,
+      weight: set.weight,
+      reps: set.reps,
+      rest: set.rest || 0,
+      localId: set.id,
+      timestamp: set.timestamp
+    };
+    
+    logger.log(`    Payload: ${JSON.stringify(messagePayload)}`);
+    
+    // Leer cola actual
+    const pendingJson = localStorage.getItem('pending_sync') || '[]';
+    logger.log(`    pending_sync actual: ${pendingJson}`);
+    
+    let pending = [];
+    try {
+      pending = JSON.parse(pendingJson);
+    } catch(e) {
+      logger.log(`    Error parseando pending_sync, reiniciando`);
+      pending = [];
+    }
+    
+    // Añadir a la cola
+    pending.push(messagePayload);
+    localStorage.setItem('pending_sync', JSON.stringify(pending));
+    
+    logger.log(`    ✓ Set añadido. Cola tiene ${pending.length} pendientes`);
+    
+    // Verificar que se guardó
+    const verify = localStorage.getItem('pending_sync');
+    logger.log(`    Verificación: ${verify.substring(0, 50)}...`);
+    
+  } catch(e) {
+    logger.log(`    ✗ Error: ${e}`);
   }
 }

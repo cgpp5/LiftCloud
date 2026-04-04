@@ -5,8 +5,8 @@
     "appName": "LiftCloud",
     "appType": "app",
     "version": {
-      "code": 1,
-      "name": "1.0.1"
+      "code": 3,
+      "name": "1.0.3"
     },
     "icon": "icon.png",
     "vender": "LiftCloud Dev",
@@ -14,12 +14,13 @@
   },
   "permissions": [
     "data:os.device.info",
-    "device:os.local_storage"
+    "device:os.local_storage",
+    "device:os.bg_service"
   ],
   "runtime": {
     "apiVersion": {
       "compatible": "4.0",
-      "target": "4.0",
+      "target": "4.2",
       "minVersion": "4.0"
     }
   },
@@ -29,10 +30,11 @@
       "module": {
         "page": {
           "pages": [
+            "page/gt/home/summary.page",
             "page/gt/home/exercise.page",
+            "page/gt/home/edit-exercise.page",
             "page/gt/home/details.page",
-            "page/gt/home/rest.page",
-            "page/gt/home/summary.page"
+            "page/gt/home/rest.page"
           ]
         },
         "app-side": {
